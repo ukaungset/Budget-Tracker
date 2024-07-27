@@ -7,10 +7,16 @@
     app:cardCornerRadius="8dp"
     app:cardElevation="2dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="16dp">
+        android:layout_weight="3">
 
     <TextView
         android:id="@+id/tvTransactionTitle"
@@ -49,5 +55,23 @@
         android:textColor="@android:color/darker_gray"/>
 
     </RelativeLayout>
+
+        <Button
+            android:id="@+id/btnEdit"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="Edit"
+            android:layout_weight="1"
+            android:visibility="gone"/>
+
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="Delete"
+            android:layout_weight="1"
+            android:visibility="gone"/>
+
+    </LinearLayout>
 
 </androidx.cardview.widget.CardView>

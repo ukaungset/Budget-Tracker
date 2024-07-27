@@ -2,4 +2,5 @@
 <resources>
 
     <string name="no_data">No Data!</string>
+    <string name="d_kyats">%,d Kyats</string>
 </resources>

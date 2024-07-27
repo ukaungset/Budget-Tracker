@@ -12,4 +12,6 @@
     <color name="dark_teal">#63be99</color>
     <color name="amour">#EBEBEB</color>
     <color name="green_gray">#289348</color>
+
+    <color name="variant_green_300">#00FF00</color>
 </resources>

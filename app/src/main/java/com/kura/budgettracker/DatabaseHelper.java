@@ -64,10 +64,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     //insert data
-    public long insertData (String type, String date, String description, double amount){
+    public long insertData (TransactionType type, String date, String description, int amount){
         SQLiteDatabase database = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
-        contentValues.put(KEY_TYPE,type);
+        contentValues.put(KEY_TYPE,type.name());
         contentValues.put(KEY_DATE,reformDate(date));
         contentValues.put(KEY_DESCRIPTION,description);
         contentValues.put(KEY_AMOUNT,amount);
@@ -76,15 +76,21 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return id;
     }
 
-    public boolean isDatabaseEmpty(){
-        try (SQLiteDatabase db = this.getReadableDatabase()){
-            Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM "+TABLE_TRACKER, null);
-            if(cursor != null && cursor.getCount()>0)
-            {
-                return false;
+    public boolean isDatabaseEmpty() {
+        SQLiteDatabase db = this.getWritableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery("SELECT COUNT (*) FROM " + TABLE_TRACKER, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int count = cursor.getInt(0);
+                return count == 0;
             }
         } catch (SQLiteException e) {
             return true;
+        } finally {
+            if(cursor != null) {
+                cursor.close();
+            }
         }
         return true;
     }
@@ -111,66 +117,60 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return database.rawQuery(query,new String[]{monthFilter});
     }
 
-    public Cursor dataFromCurrentMonth(String keyType){
+    public Cursor dataFromCurrentMonth(TransactionType keyType){
         SQLiteDatabase database = this.getReadableDatabase();
         String currentYear = String.valueOf(calendar.get(Calendar.YEAR));
         String currentMonth = String.format("%02d",calendar.get(Calendar.MONTH) + 1);
 
         String query = "SELECT * FROM " + TABLE_TRACKER + " WHERE " + KEY_TYPE + " = ?  AND strftime('%Y-%m', " + KEY_DATE  + ")=? ";
         String monthFilter = currentYear + "-"+ currentMonth;
-        return database.rawQuery(query, new String[]{keyType, monthFilter});
-    }
-
-    //delete data
-    public void deleteData(String typeToDelete){
-        SQLiteDatabase database = this.getWritableDatabase();
-        database.delete(TABLE_TRACKER,"type = ?",new String[]{typeToDelete});
-        database.close();
+        return database.rawQuery(query, new String[]{String.valueOf(keyType), monthFilter});
     }
 
     public void updateFinalStatementForPreviousMonth(){
         SQLiteDatabase database = this.getWritableDatabase();
         int currentYear = calendar.get(Calendar.YEAR);
         int currentMonth = calendar.get(Calendar.MONTH) + 1;
+        String checkQuery = "SELECT COUNT (*) FROM " + TABLE_TRACKER + " WHERE " + KEY_TYPE + " = ? AND strftime ('%Y-%m' , " + KEY_DATE + ") = ?";
+        Cursor checkCursor = database.rawQuery(checkQuery, new String[]{String.valueOf(TransactionType.Starting_Balance),currentYear+ "-"+ currentMonth});
+        checkCursor.moveToFirst();
+        int count = checkCursor.getInt(0);
+        checkCursor.close();
+
         //to get last month
-        int lastMonth = currentMonth - 1;
-        int lastYear = currentYear;
-        if(lastMonth == 0){
-            lastMonth = 12;
-            lastYear -= 1;
-        }
-        //Format the month for SQL
-        String lastMonthTwoDigitFormatted = String.format("%02d",lastMonth);
-        //calculating last month balance
-        String query = "SELECT (SELECT COALESCE(SUM(" + KEY_AMOUNT + "),0) FROM " + TABLE_TRACKER +
-                " WHERE " + KEY_TYPE + " = 'Income' AND strftime ('%Y-%m', " + KEY_DATE + ") = ?) -"
-                + "(SELECT COALESCE(SUM(" + KEY_AMOUNT + "),0) FROM " + TABLE_TRACKER +
-        " WHERE " + KEY_TYPE + " = 'Expense' AND strftime ('%Y-%m' ," + KEY_DATE + ") = ?)";
-        Cursor cursor = database.rawQuery(query,new String[]{lastYear+"-"+lastMonthTwoDigitFormatted, lastYear+"-"+lastMonthTwoDigitFormatted});
+        if (count== 0) {
+            int lastMonth = currentMonth - 1;
+            int lastYear = currentYear;
+            if(lastMonth == 0){
+                lastMonth = 12;
+                lastYear -= 1;
+            }
+            //Format the month for SQL
+            String lastMonthTwoDigitFormatted = String.format("%02d",lastMonth);
+            //calculating last month balance
+            String query = "SELECT (SELECT COALESCE(SUM(" + KEY_AMOUNT + "),0) FROM " + TABLE_TRACKER +
+                    " WHERE " + KEY_TYPE + " = 'Income' AND strftime ('%Y-%m', " + KEY_DATE + ") = ?) -"
+                    + "(SELECT COALESCE(SUM(" + KEY_AMOUNT + "),0) FROM " + TABLE_TRACKER +
+            " WHERE " + KEY_TYPE + " = 'Expense' AND strftime ('%Y-%m' ," + KEY_DATE + ") = ?)";
+            Cursor cursor = database.rawQuery(query,new String[]{lastYear+"-"+lastMonthTwoDigitFormatted, lastYear+"-"+lastMonthTwoDigitFormatted});
 
-        int lastMonthBalance = 0;
-        if(cursor.moveToFirst()){
-            lastMonthBalance = cursor.getInt(0);
-        }
-        cursor.close();
+            int lastMonthBalance = 0;
+            if(cursor.moveToFirst()){
+                lastMonthBalance = cursor.getInt(0);
+            }
+            cursor.close();
 
-        //adding starting Balance
-        SimpleDateFormat smp = new SimpleDateFormat("MMM",Locale.getDefault());
-        String lastMonthTextFormatted = smp.format(calendar.getTime());
-        String startingDescription = "Starting Balance of " + lastMonthTextFormatted;
+            //adding starting Balance
+            SimpleDateFormat smp = new SimpleDateFormat("MMMM",Locale.getDefault());
+            String lastMonthTextFormatted = smp.format(calendar.getTime());
+            String startingDescription = "Starting Balance of " + lastMonthTextFormatted;
 
 //        String startingDate = "01-"+lastMonth+"-"+lastYear;
-        calendar.set(Calendar.DAY_OF_MONTH,1);
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd/MM/yyyy",Locale.getDefault());
-        String dateFormat = simpleDateFormat.format(calendar.getTime());
-        insertData("Starting Balance",dateFormat,"Starting Balance",lastMonthBalance);
-//        ContentValues contentValues = new ContentValues();
-//        contentValues.put(KEY_TYPE,"Starting Balance");
-//        contentValues.put(KEY_DATE,startingDate);
-//        contentValues.put(KEY_DESCRIPTION,startingDescription);
-//        contentValues.put(KEY_AMOUNT,lastMonthBalance);
-//        database.insert(TABLE_TRACKER,null,contentValues);
-//        database.close();
+            calendar.set(Calendar.DAY_OF_MONTH,1);
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd/MM/yyyy",Locale.getDefault());
+            String dateFormat = simpleDateFormat.format(calendar.getTime());
+            insertData(TransactionType.Starting_Balance,dateFormat,startingDescription,lastMonthBalance);
+        }
 
     }
 

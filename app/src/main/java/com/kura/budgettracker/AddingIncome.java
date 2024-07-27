@@ -1,8 +1,10 @@
 package com.kura.budgettracker;
 
 import android.app.DatePickerDialog;
-import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.Button;
@@ -13,97 +15,169 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Locale;
 
 public class AddingIncome extends AppCompatActivity {
 
-    EditText dateText,descriptionText, amountText;
-    Button addData;
-    TextView incomeData,inputDate;
-    int  amount;
+    EditText dateText, descriptionText, amountText;
+    Button addData, cancleButton;
+    TextView inputDate;
+    int amount;
     String date, description;
-    String type;
-
-    //about dataBase
-    DatabaseHelper databaseHelper = new DatabaseHelper(this);
-
+    Spinner dataSpinner;
+    TransactionType type;
+    Calendar calendar;
+    private Transaction transaction;
+    private TransactionDAO transactionDAO;
 
     @Override
-    public void onCreate( Bundle savedInstanceState) {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.monthly_income);
 
-        Calendar calendar = Calendar.getInstance();
+        calendar = Calendar.getInstance();
 
         //connecting views
         dateText = findViewById(R.id.editTextDate);
         descriptionText = findViewById(R.id.editTextDescription);
         amountText = findViewById(R.id.editTextAmount);
         addData = findViewById(R.id.buttonAdd);
-        Spinner dataSpinner = findViewById(R.id.input_data_type);
-        inputDate = findViewById(R.id.input_date);
+        dataSpinner = findViewById(R.id.input_data_type);
+        cancleButton = findViewById(R.id.cancelButton);
+
+        transactionDAO = new TransactionDAO(this);
+        transactionDAO.open();
+
+        TextWatcher textWatcher =new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                checkFieldsForEmptyValue();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+
+            }
+        };
+
+        dateText.addTextChangedListener(textWatcher);
+        descriptionText.addTextChangedListener(textWatcher);
+        amountText.addTextChangedListener(textWatcher);
+
         dataSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 switch (position) {
                     case 0:
-                        type = "Income";
+                        type = TransactionType.Income;
                         break;
 
                     case 1:
-                        type = "Expense";
+                        type = TransactionType.Expense;
                         break;
                 }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-                type = "Income";
+                type = TransactionType.Income;
             }
         });
 
-        inputDate.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                showDatePickerDialog();
-            }
+        Intent getIntent = getIntent();
+        if (getIntent != null && getIntent.hasExtra("TRANSACTION")) {
+            transaction = (Transaction) getIntent.getSerializableExtra("TRANSACTION");
+            populateUI(transaction);
+        }
+
+        addData.setOnClickListener(v -> {
+            saveTransaction();
         });
 
-        databaseHelper.getWritableDatabase();
+        cancleButton.setOnClickListener(v -> {
+            setResult(RESULT_CANCELED);
+            finish();
+        });
 
-        //clicking button
-        addData.setOnClickListener(view -> {
-            //getting resources
-            date = dateText.getText().toString();
-            description = descriptionText.getText().toString();
-            amount = Integer.parseInt(amountText.getText().toString());
-            //insertData();
-            long trackerID = databaseHelper.insertData(type, date, description, amount);
-            String id = String.valueOf(trackerID);
-            Toast.makeText(this, id, Toast.LENGTH_LONG).show();
+        dateText.setKeyListener(null);
+        dateText.setOnClickListener(v -> {
+            int year = calendar.get(Calendar.YEAR);
+            int month = calendar.get(Calendar.MONTH);
+            int day = calendar.get(Calendar.DAY_OF_MONTH);
 
+            DatePickerDialog datePickerDialog = new DatePickerDialog(AddingIncome.this,
+                    new DatePickerDialog.OnDateSetListener() {
+                        @Override
+                        public void onDateSet(DatePicker datePicker, int year, int month, int day) {
+                            calendar.set(Calendar.YEAR, year);
+                            calendar.set(Calendar.MONTH, month);
+                            calendar.set(Calendar.DAY_OF_MONTH, day);
+                            String myFormat = "yyyy-MM-dd";
+                            SimpleDateFormat sdf = new SimpleDateFormat(myFormat, Locale.getDefault());
+                            dateText.setText(sdf.format(calendar.getTime()));
+                        }
+                    }, year, month, day);
+            datePickerDialog.show();
         });
     }
-    private void showDatePickerDialog(){
-        Calendar calendar = Calendar.getInstance();
-        int year = calendar.get(Calendar.YEAR);
-        int month = calendar.get(Calendar.MONTH);
-        int day = calendar.get(Calendar.DAY_OF_MONTH);
 
-        DatePickerDialog datePickerDialog = new DatePickerDialog(this,
-                new DatePickerDialog.OnDateSetListener() {
-                    @Override
-                    public void onDateSet(DatePicker datePicker, int year, int month, int day) {
-                        String selectedDate = formatDate(year,month,day);
-                        inputDate.setText(selectedDate);
-                    }
-                }, year, month, day);
-        datePickerDialog.show();
+    private void checkFieldsForEmptyValue() {
+        String description = descriptionText.getText().toString();
+        String date = dateText.getText().toString();
+        String amount = amountText.getText().toString();
+
+        boolean allFieldsFilled = !description.isEmpty() && !date.isEmpty() && !amount.isEmpty();
+        addData.setEnabled(allFieldsFilled);
     }
 
-    private String formatDate(int year, int month, int day)
-    {
-        return day + "-" + month + "-" + year;
+    private void populateUI(Transaction transaction) {
+        descriptionText.setText(transaction.getTitle());
+        dateText.setText(transaction.getDate());
+        amountText.setText(String.valueOf(transaction.getAmount()));
+
+        switch (transaction.getType()) {
+            case Income:
+                dataSpinner.setSelection(0);
+                break;
+
+            case Expense:
+                dataSpinner.setSelection(1);
+                break;
+        }
     }
 
+    private void saveTransaction() {
+        String title = descriptionText.getText().toString();
+        String date = dateText.getText().toString();
+        int amount = Integer.parseInt(amountText.getText().toString());
+        TransactionType type = TransactionType.valueOf(dataSpinner.getSelectedItem().toString());
+
+        if(transaction == null) {
+            transaction = new Transaction(title, amount, date, type);
+            transactionDAO.insertTransaction(transaction);
+            Toast.makeText(this, "New Transaction Added", Toast.LENGTH_SHORT).show();
+        } else {
+            transaction.setTitle(title);
+            transaction.setAmount(amount);
+            transaction.setType(type);
+            transaction.setDate(date);
+            transactionDAO.updateTransaction(transaction);
+            Toast.makeText(this, "Transaction is updated", Toast.LENGTH_SHORT).show();
+        }
+        setResult(RESULT_OK);
+        finish();
+    }
+
+    @Override
+    protected void onDestroy() {
+        transactionDAO.close();
+        super.onDestroy();
+    }
 }

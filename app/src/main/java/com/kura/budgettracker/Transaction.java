@@ -1,18 +1,29 @@
 package com.kura.budgettracker;
 
-public class Transaction {
+
+import java.io.Serializable;
+
+public class Transaction implements Serializable {
+    private static final long serialVersionUID = 1L;
     private int id;
     private String title;
-    private double amount;
+    private int amount;
     private String date;
-    private String type;
+    private TransactionType type;
 
-    public Transaction(int id, String title, double amount, String date, String type){
-        this.setId(id);
-        this.setTitle(title);
-        this.setAmount(amount);
-        this.setDate(date);
-        this.setType(type);
+    public Transaction(int id, String title, int amount, String date, TransactionType type){
+        this.id = id;
+        this.title = title;
+        this.amount = amount;
+        this.date = date;
+        this.type = type;
+    }
+
+    public Transaction (String title, int amount, String date, TransactionType type) {
+        this.title = title;
+        this.amount = amount;
+        this.date = date;
+        this.type = type;
     }
 
     public int getId() {
@@ -31,11 +42,11 @@ public class Transaction {
         this.title = title;
     }
 
-    public double getAmount() {
+    public int getAmount() {
         return amount;
     }
 
-    public void setAmount(double amount) {
+    public void setAmount(int amount) {
         this.amount = amount;
     }
 
@@ -47,11 +58,11 @@ public class Transaction {
         this.date = date;
     }
 
-    public String getType() {
+    public TransactionType getType() {
         return type;
     }
 
-    public void setType(String type) {
+    public void setType(TransactionType type) {
         this.type = type;
     }
 }

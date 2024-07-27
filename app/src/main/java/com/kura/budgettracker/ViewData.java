@@ -1,29 +1,37 @@
 package com.kura.budgettracker;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.database.Cursor;
-import android.graphics.Color;
+import android.content.Intent;
 import android.os.Bundle;
-import android.view.Gravity;
+import android.view.ContextMenu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.Serializable;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
-
-import static java.lang.String.*;
 
 public class ViewData extends AppCompatActivity {
     TextView month;
-    LinearLayout dateLayout, categoryLayout, amountLayout;
-    Spinner spinner;
+    private Spinner spinner;
+    private ListView mTransactionList;
+    private TransactionDAO transactionDAO;
+    private List<Transaction> transactionList;
+    private List<Transaction> filteredTransactions;
+    private MyAdapter adapter;
+    private static final int REQUEST_CODE_EDIT_TRANSACTION = 1;
 
     //working with database
     DatabaseHelper databaseHelper = new DatabaseHelper(this);
@@ -35,12 +43,20 @@ public class ViewData extends AppCompatActivity {
 
         //connecting to the views
         month = findViewById(R.id.date_textView);
-        dateLayout = findViewById(R.id.date_layout);
-        categoryLayout = findViewById(R.id.category_layout);
-        amountLayout = findViewById(R.id.amount_layout);
         spinner = findViewById(R.id.spinner);
+        mTransactionList = findViewById(R.id.monthlyTransactionList);
 
-        ArrayAdapter<CharSequence> arrayAdapter = ArrayAdapter.createFromResource(this,R.array.budget_array, android.R.layout.simple_spinner_item);
+        transactionDAO = new TransactionDAO(this);
+        transactionDAO.open();
+
+        transactionList = transactionDAO.getAllTransactionsForCurrentMonth();
+        filteredTransactions = new ArrayList<>(transactionList);
+        adapter = new MyAdapter(this, filteredTransactions);
+        mTransactionList.setAdapter(adapter);
+
+        registerForContextMenu(mTransactionList);
+
+        ArrayAdapter<CharSequence> arrayAdapter = ArrayAdapter.createFromResource(this,R.array.filter_array, android.R.layout.simple_spinner_item);
         arrayAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(arrayAdapter);
 
@@ -48,65 +64,95 @@ public class ViewData extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
                 String type = (String) adapterView.getItemAtPosition(position);
-                switch (type){
-                    case "Income":
-                        showData("Income");
-                        break;
-
-                    case "Expense":
-                        showData("Expense");
-                }
+                filterTransaction(type);
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> adapterView) {
-                showData("Expense");
+                //nothing to do
             }
         });
 
         //creating calendar
         Calendar calendar = Calendar.getInstance();
         SimpleDateFormat simpleDateFormat = new SimpleDateFormat("MMMM yyyy", Locale.getDefault());
-        String monthString = simpleDateFormat.format(calendar.getTime());
-
+        String monthString = simpleDateFormat.format(calendar.getTime()).toUpperCase(Locale.getDefault());
         //setting text
         month.setText(monthString);
     }
 
-    private void showData(String type) {
-        Cursor cursor;
-        if(type.endsWith("Income")) {
-            cursor = databaseHelper.readIncomeData();
-        } else {
-            cursor = databaseHelper.filterExpenseByCurrentMonth();
-        }
-        dateLayout.removeAllViews();
-        categoryLayout.removeAllViews();
-        amountLayout.removeAllViews();
-        //income total
-        int income = 0;
-        //reading cursor
-        if(cursor.getCount()!=0){
-            while (cursor.moveToNext()){
-                //creating textView
-                TextView dateTextView = new TextView(this);
-                dateTextView.setText(valueOf(cursor.getString(2)));
-                dateLayout.addView(dateTextView);
+    @Override
+    public void onBackPressed() {
+        setResult(RESULT_OK);
+        super.onBackPressed();
+    }
 
-                TextView categoryTextView = new TextView(this);
-                categoryTextView.setText(cursor.getString(3));
-                categoryTextView.setGravity(Gravity.CENTER);
-                categoryLayout.addView(categoryTextView);
+    @Override
+    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+//        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) menuInfo;
+//        Transaction selectedTransaction = filteredTransactions.get(info.position);
+//
+//        if(selectedTransaction.getType() != TransactionType.Starting_Balance) {
+//            MenuInflater inflater = getMenuInflater();
+//            inflater.inflate(R.menu.context_menu, menu);
+//        }
 
-                TextView amountTextView = new TextView(this);
-                amountTextView.setText(valueOf(cursor.getInt(4)));
-                income += cursor.getInt(4);
-                amountTextView.setGravity(Gravity.RIGHT);
-                amountLayout.addView(amountTextView);
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.context_menu, menu);
+    }
 
-            }
-        } else {
-            Toast.makeText(getApplicationContext(), R.string.no_data, Toast.LENGTH_LONG).show();
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
+        AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        int position = info.position;
+        Transaction selectedTransaction = filteredTransactions.get(position);
+
+        switch (item.getItemId()) {
+            case R.id.menu_edit:
+                Intent intent = new Intent(ViewData.this, AddingIncome.class);
+                intent.putExtra("TRANSACTION", (Serializable) selectedTransaction);
+                startActivity(intent);
+                Toast.makeText(this, "Item Editing", Toast.LENGTH_SHORT).show();
+                return true;
+
+            case R.id.menu_delete:
+                transactionDAO.deleteTransaction(filteredTransactions.get(position).getId());
+                filteredTransactions.remove(position);
+                adapter.notifyDataSetChanged();
+                Toast.makeText(this, "Item Deleted", Toast.LENGTH_SHORT).show();
+                return true;
+
+            default:
+                return super.onContextItemSelected(item);
         }
     }
+
+    private void filterTransaction(String filter) {
+        filteredTransactions.clear();
+        switch (filter) {
+            case "Income":
+                for (Transaction t : transactionList) {
+                    if (t.getType() == TransactionType.Income) {
+                        filteredTransactions.add(t);
+                    }
+                }
+                break;
+
+            case "Expense":
+                for (Transaction t : transactionList) {
+                    if (t.getType() == TransactionType.Expense) {
+                        filteredTransactions.add(t);
+                    }
+                }
+                break;
+
+            case "All":
+            default:
+                filteredTransactions.addAll(transactionList);
+                break;
+        }
+        adapter.notifyDataSetChanged();
+    }
+
 }

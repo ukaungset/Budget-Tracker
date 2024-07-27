@@ -1,10 +1,11 @@
 <resources>
-    <string name="app_name">BudgetTracker</string>
+    <string name="app_name">Budget Tracker</string>
     <string name="date">Date</string>
     <string name="category">Category</string>
     <string name="amount">Amount</string>
     <string name="no_data">No Data!</string>
-    <string name="MMK">Kyats</string>
+    <string name="myanmar_currency">Kyats</string>
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="d_kyats">%,d Kyats</string>
 </resources>
